@@ -246,14 +246,23 @@ export default function WCST({ onComplete }: WCSTProps) {
   };
 
   // Export to CSV with enhanced data
+    // Export to CSV with enhanced data
   const exportToCSV = () => {
     const headers = [
       "Trial",
-      "Is Correct",
-      "Perseverative",
-      "Tendency At Trial"
+      "Response Color",
+      "Response Shape", 
+      "Response Number",
+      "Stimulus Chosen (ID)",
+      "Active Rule",
+      "Correct (1=Y | 0=N)",
+      "Unambiguous (1=Y | 0=N)",
+      "Dimension Used (if Unambiguous)",
+      "Perseverative (1=Y | 0=N)",
+      "All Matching Dimensions"
     ];
 
+    // Add summary scores at the top
     const summaryRows = [
       ["WCST RESULTS SUMMARY"],
       [""],
@@ -275,7 +284,7 @@ export default function WCST({ onComplete }: WCSTProps) {
       ["Failure to Maintain Set", finalScores.failureToMaintainSet],
       ["Learning to Learn", typeof finalScores.learningToLearn === 'number' ? finalScores.learningToLearn.toFixed(2) : finalScores.learningToLearn || 'N/A'],
       [""],
-      ["PROCESSED TRIAL DATA"],
+      ["RAW TRIAL DATA"],
       [""]
     ];
 
@@ -283,10 +292,17 @@ export default function WCST({ onComplete }: WCSTProps) {
       ...summaryRows.map(row => row.join(',')),
       headers.join(','),
       ...finalProcessedResponses.map(response => [
-        response.trialNumber,
+        response.trial,
+        response.responseCard.color,
+        response.responseCard.shape,
+        response.responseCard.number,
+        response.stimulusChosen,
+        response.activeRule,
         response.isCorrect ? 1 : 0,
+        response.isUnambiguous ? 1 : 0,
+        response.dimensionUsedIfUnambiguous || '',
         response.perseverative ? 1 : 0,
-        response.tendencyAtTrial || ''
+        (response.allMatchingDimensions || []).join(';')
       ].join(','))
     ].join('\n');
 
