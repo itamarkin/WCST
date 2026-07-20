@@ -361,7 +361,7 @@ function computeLTL(
   const sum = differences.reduce((acc, v) => acc + v, 0);
   const ltl = sum / differences.length;
   const rounded = Math.round(ltl * 100) / 100;
-  return rounded === 0 ? null : rounded;
+  return rounded;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,12 +408,18 @@ export function scoreWCST(rawTrials: RawTrial[]): WCSTScores {
     p1.categoriesCompleted
   );
 
-  const processedResponses: ProcessedResponse[] = rows.map((r, i) => ({
-    trialNumber: r.trialNumber,
-    isCorrect: r.isCorrect,
-    perseverative: perseverativeFlags[i],
-    tendencyAtTrial: p2.tendencyBefore[i],
-  }));
+  const processedResponses: ProcessedResponse[] = rawTrials.map((t, i) => ({
+  trialNumber: t.trialNumber,
+  responseCard: t.responseCard,
+  selectedStimulusIndex: t.selectedStimulusIndex,
+  activeRule: t.activeRule,
+  isCorrect: t.isCorrect,
+  isUnambiguous: t.isUnambiguous,
+  dimensionUsedIfUnambiguous: t.dimensionUsedIfUnambiguous,
+  allMatchingDimensions: t.allMatchingDimensions,
+  perseverative: perseverativeFlags[i],
+  tendencyAtTrial: p2.tendencyBefore[i],
+}));
 
   return {
     totalTrials,
