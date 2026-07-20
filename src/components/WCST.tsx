@@ -245,8 +245,7 @@ export default function WCST({ onComplete }: WCSTProps) {
     }
   };
 
-  // Export to CSV with enhanced data
-    // Export to CSV with enhanced data
+ // Export to CSV with enhanced data
   const exportToCSV = () => {
     const headers = [
       "Trial",
@@ -293,7 +292,8 @@ export default function WCST({ onComplete }: WCSTProps) {
       ...summaryRows.map(row => row.join(',')),
       headers.join(','),
       ...finalProcessedResponses.map(response => [
-        response.trial,
+        // Fix 1: Changed response.trial to response.trialNumber
+        response.trialNumber, 
         response.responseCard.color,
         response.responseCard.shape,
         response.responseCard.number,
@@ -303,9 +303,10 @@ export default function WCST({ onComplete }: WCSTProps) {
         response.isUnambiguous ? 1 : 0,
         response.dimensionUsedIfUnambiguous || '',
         response.perseverative ? 1 : 0,
-        (response.allMatchingDimensions || []).join(';')
-      ].join(','),
-        response.tendencyAtTrial || '',)
+        (response.allMatchingDimensions || []).join(';'),
+        // Fix 2: Moved tendencyAtTrial inside the array bracket
+        response.tendencyAtTrial || '' 
+      ].join(',')) 
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
