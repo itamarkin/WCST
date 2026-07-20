@@ -259,7 +259,8 @@ export default function WCST({ onComplete }: WCSTProps) {
       "Unambiguous (1=Y | 0=N)",
       "Dimension Used (if Unambiguous)",
       "Perseverative (1=Y | 0=N)",
-      "All Matching Dimensions"
+      "All Matching Dimensions",
+      "Tendency At Trial"
     ];
 
     // Add summary scores at the top
@@ -296,14 +297,15 @@ export default function WCST({ onComplete }: WCSTProps) {
         response.responseCard.color,
         response.responseCard.shape,
         response.responseCard.number,
-        response.stimulusChosen,
+        response.selectedStimulusIndex,
         response.activeRule,
         response.isCorrect ? 1 : 0,
         response.isUnambiguous ? 1 : 0,
         response.dimensionUsedIfUnambiguous || '',
         response.perseverative ? 1 : 0,
         (response.allMatchingDimensions || []).join(';')
-      ].join(','))
+      ].join(','),
+        response.tendencyAtTrial || '',)
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
