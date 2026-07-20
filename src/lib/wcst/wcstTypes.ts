@@ -26,7 +26,13 @@ export interface RawTrial {
 // A trial after the scoring passes have annotated it.
 export interface ProcessedResponse {
   trialNumber: number;
+  responseCard: Card;
+  selectedStimulusIndex: number;
+  activeRule: Dimension;
   isCorrect: boolean;
+  isUnambiguous: boolean;
+  dimensionUsedIfUnambiguous: Dimension | null;
+  allMatchingDimensions: Dimension[];
   perseverative: boolean;
   tendencyAtTrial: Dimension | null;
 }
