@@ -160,7 +160,6 @@ function pass2(
   const perseverative: boolean[] = new Array(n).fill(false);
 
   let tendency: Dimension | null = null;
-  let firstUnambiguousErrorFound = false;
   const completionSet = new Set(categoryCompletionIndices);
   const r3: RuleOf3State = {
     candidateDimension: null,
@@ -188,11 +187,12 @@ function pass2(
     if (row.isUnambiguous && !row.isCorrect) {
       const dim = row.dimensionUsedIfUnambiguous as Dimension;
 
-      if (!firstUnambiguousErrorFound) {
-        // First unambiguous error of the test establishes tendency. This trial
-        // is NOT itself perseverative.
+      if (tendency === null) {
+        // First unambiguous error of the test establishes tendency (only
+        // reachable if no category has completed yet either, since category
+        // completion also sets tendency directly above). This trial is NOT
+        // itself perseverative.
         tendency = dim;
-        firstUnambiguousErrorFound = true;
         resetRuleOf3();
         continue;
       }
