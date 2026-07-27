@@ -16,6 +16,7 @@ import {
 } from '@/lib/wcst/wcstEngine';
 import { scoreWCST } from '@/lib/wcst/wcstScoring';
 import type { RawTrial } from '@/lib/wcst/wcstTypes';
+import { DEBUG_SCENARIOS } from '@/lib/wcst/debugScenarios';
 
 // Mock results for debug mode
 const MOCK_DEBUG_DATA = {
@@ -38,9 +39,42 @@ const MOCK_DEBUG_DATA = {
     learningToLearn: 1.54,
   },
   processedResponses: [
-    { trialNumber: 1, isCorrect: true, perseverative: false, tendencyAtTrial: null },
-    { trialNumber: 2, isCorrect: true, perseverative: false, tendencyAtTrial: null },
-    { trialNumber: 3, isCorrect: false, perseverative: true, tendencyAtTrial: 'color' },
+    {
+      trialNumber: 1,
+      responseCard: { color: 'green', shape: 'triangle', number: 1 },
+      selectedStimulusIndex: 1,
+      activeRule: 'color',
+      isCorrect: true,
+      isUnambiguous: true,
+      dimensionUsedIfUnambiguous: 'color',
+      allMatchingDimensions: ['color'],
+      perseverative: false,
+      tendencyAtTrial: null,
+    },
+    {
+      trialNumber: 2,
+      responseCard: { color: 'red', shape: 'cross', number: 4 },
+      selectedStimulusIndex: 0,
+      activeRule: 'color',
+      isCorrect: true,
+      isUnambiguous: true,
+      dimensionUsedIfUnambiguous: 'color',
+      allMatchingDimensions: ['color'],
+      perseverative: false,
+      tendencyAtTrial: null,
+    },
+    {
+      trialNumber: 3,
+      responseCard: { color: 'blue', shape: 'triangle', number: 2 },
+      selectedStimulusIndex: 0,
+      activeRule: 'color',
+      isCorrect: false,
+      isUnambiguous: true,
+      dimensionUsedIfUnambiguous: 'shape',
+      allMatchingDimensions: ['shape'],
+      perseverative: true,
+      tendencyAtTrial: 'color',
+    },
   ],
 };
 
@@ -66,17 +100,35 @@ export default function WCST({ onComplete }: WCSTProps) {
   const engineRef = useRef<EngineState>(createInitialEngineState());
 
   // --- Debug Mode Initialization ---
+  // ?debug=<scenarioName> runs a named RawTrial[] fixture through the REAL
+  // scoreWCST pipeline (same code path a live test uses), so results can
+  // never silently drift from a hand-maintained mock object. Database saving
+  // is skipped for debug runs. ?debug=true with no matching name falls back
+  // to the old static mock (useful for a pure layout/style check) and lists
+  // available scenario names in the console.
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    const isDebugMode = searchParams.get('debug') === 'true';
+    const debugParam = searchParams.get('debug');
+    if (!debugParam) return;
 
-    if (isDebugMode) {
-      console.log("DEBUG MODE: Skipping to completion screen with mock data.");
-      setFinalScores(MOCK_DEBUG_DATA.scores);
-      setFinalProcessedResponses(MOCK_DEBUG_DATA.processedResponses);
-      setCompleted(true);
+    const scenarioBuilder = DEBUG_SCENARIOS[debugParam];
+
+    if (scenarioBuilder) {
+      console.log(`DEBUG MODE: running scenario "${debugParam}" through the real scoring pipeline.`);
       setShowInstructions(false);
+      const trials = scenarioBuilder();
+      finishTest(trials, { skipSave: true });
+      return;
     }
+
+    console.log(
+      `DEBUG MODE: no scenario named "${debugParam}". Available scenarios: ${Object.keys(DEBUG_SCENARIOS).join(', ')}. Falling back to static mock data.`
+    );
+    setFinalScores(MOCK_DEBUG_DATA.scores);
+    setFinalProcessedResponses(MOCK_DEBUG_DATA.processedResponses);
+    setCompleted(true);
+    setShowInstructions(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Helper function to render card symbols with proper positioning
@@ -224,14 +276,20 @@ export default function WCST({ onComplete }: WCSTProps) {
   };
 
   // Finish test: score the raw trials deterministically (no React state used).
-  const finishTest = (finalRawResponses: RawTrial[]) => {
+  // skipSave=true is used by debug scenarios so exploratory/fixture runs never
+  // write fake data into Supabase.
+  const finishTest = (finalRawResponses: RawTrial[], options?: { skipSave?: boolean }) => {
     try {
       setCompleted(true);
       const scores = scoreWCST(finalRawResponses);
       setFinalScores(scores);
       setFinalProcessedResponses(scores.processedResponses);
 
-      saveToDatabase(scores, scores.processedResponses);
+      if (!options?.skipSave) {
+        saveToDatabase(scores, scores.processedResponses);
+      } else {
+        setSaveStatus('idle');
+      }
 
       if (onComplete) {
         onComplete({
@@ -245,7 +303,8 @@ export default function WCST({ onComplete }: WCSTProps) {
     }
   };
 
- // Export to CSV with enhanced data
+  // Export to CSV with enhanced data
+    // Export to CSV with enhanced data
   const exportToCSV = () => {
     const headers = [
       "Trial",
@@ -292,8 +351,7 @@ export default function WCST({ onComplete }: WCSTProps) {
       ...summaryRows.map(row => row.join(',')),
       headers.join(','),
       ...finalProcessedResponses.map(response => [
-        // Fix 1: Changed response.trial to response.trialNumber
-        response.trialNumber, 
+        response.trial,
         response.responseCard.color,
         response.responseCard.shape,
         response.responseCard.number,
@@ -303,10 +361,9 @@ export default function WCST({ onComplete }: WCSTProps) {
         response.isUnambiguous ? 1 : 0,
         response.dimensionUsedIfUnambiguous || '',
         response.perseverative ? 1 : 0,
-        (response.allMatchingDimensions || []).join(';'),
-        // Fix 2: Moved tendencyAtTrial inside the array bracket
-        response.tendencyAtTrial || '' 
-      ].join(',')) 
+        (response.allMatchingDimensions || []).join(';')
+      ].join(','),
+        response.tendencyAtTrial || '',)
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
