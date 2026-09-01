@@ -1,3 +1,6 @@
+הנה הקוד המלא והמתוקן לקומפוננטה.
+
+```tsx
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -78,6 +81,63 @@ const MOCK_DEBUG_DATA = {
   ],
 };
 
+// Helper constants for symbol positioning
+const POSITION_CLASSES = [
+  [],
+  ['top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'],
+  ['top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2', 'bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2'],
+  [
+    'bottom-2 left-1/2 -translate-x-1/2',
+    'top-2 left-0 -translate-x-0',
+    'top-2 right-0 -translate-x-0'
+  ],
+  ['top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2', 'top-1/4 right-1/4 translate-x-1/2 -translate-y-1/2', 'bottom-1/4 left-1/4 -translate-x-1/2 translate-y-1/2', 'bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2']
+];
+
+const getShapeSymbol = (shape: string) => {
+  switch (shape) {
+    case 'triangle': return '▲';
+    case 'star': return '★';
+    case 'cross': return '+';
+    case 'circle': return '●';
+    default: return '●';
+  }
+};
+
+const getColorClass = (color: string) => {
+  switch (color) {
+    case 'red': return 'text-red-500';
+    case 'green': return 'text-green-500';
+    case 'yellow': return 'text-yellow-500';
+    case 'blue': return 'text-blue-500';
+    default: return 'text-gray-500';
+  }
+};
+
+// Helper function to render card symbols cleanly
+const renderCardSymbols = (card: any, size = 'w-8 h-8') => {
+  if (!card) return null;
+  const { color, shape, number } = card;
+
+  const sizeClass = shape === 'cross' ? 'text-6xl' : 'text-5xl';
+  const symbol = getShapeSymbol(shape);
+  const colorClass = getColorClass(color);
+  const positions = POSITION_CLASSES[number] || [];
+
+  return (
+    <div className="relative w-full h-24">
+      {Array.from({ length: number }).map((_, i) => (
+        <div
+          key={i}
+          className={`${size} ${colorClass} flex items-center justify-center ${sizeClass} absolute font-bold ${positions[i] || ''}`}
+        >
+          {symbol}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 interface WCSTProps {
   onComplete?: (data: any) => void;
 }
@@ -95,144 +155,22 @@ export default function WCST({ onComplete }: WCSTProps) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [participantId, setParticipantId] = useState<string>('');
 
-  // Engine state drives rule sequence / category completion. Kept in a ref so
-  // the callback closure always reads the latest value without stale state.
+  // Engine state drives rule sequence / category completion.
   const engineRef = useRef<EngineState>(createInitialEngineState());
-
-  // --- Debug Mode Initialization ---
-  // ?debug=<scenarioName> runs a named RawTrial[] fixture through the REAL
-  // scoreWCST pipeline (same code path a live test uses), so results can
-  // never silently drift from a hand-maintained mock object. Database saving
-  // is skipped for debug runs. ?debug=true with no matching name falls back
-  // to the old static mock (useful for a pure layout/style check) and lists
-  // available scenario names in the console.
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Keep participant ID updated in ref to prevent stale closures during database saves
+  const participantIdRef = useRef(participantId);
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const debugParam = searchParams.get('debug');
-    if (!debugParam) return;
+    participantIdRef.current = participantId;
+  }, [participantId]);
 
-    const scenarioBuilder = DEBUG_SCENARIOS[debugParam];
-
-    if (scenarioBuilder) {
-      console.log(`DEBUG MODE: running scenario "${debugParam}" through the real scoring pipeline.`);
-      setShowInstructions(false);
-      const trials = scenarioBuilder();
-      finishTest(trials, { skipSave: true });
-      return;
-    }
-
-    console.log(
-      `DEBUG MODE: no scenario named "${debugParam}". Available scenarios: ${Object.keys(DEBUG_SCENARIOS).join(', ')}. Falling back to static mock data.`
-    );
-    setFinalScores(MOCK_DEBUG_DATA.scores);
-    setFinalProcessedResponses(MOCK_DEBUG_DATA.processedResponses);
-    setCompleted(true);
-    setShowInstructions(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Cleanup feedback timer on component unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
-
-  // Helper function to render card symbols with proper positioning
-  const renderCardSymbols = (card: any, size = 'w-8 h-8') => {
-    const { color, shape, number } = card;
-
-    const getShapeSymbol = (shape: string) => {
-      switch (shape) {
-        case 'triangle': return '▲';
-        case 'star': return '★';
-        case 'cross': return '+';
-        case 'circle': return '●';
-        default: return '●';
-      }
-    };
-
-    const getColorClass = (color: string) => {
-      switch (color) {
-        case 'red': return 'text-red-500';
-        case 'green': return 'text-green-500';
-        case 'yellow': return 'text-yellow-500';
-        case 'blue': return 'text-blue-500';
-        default: return 'text-gray-500';
-      }
-    };
-
-    let sizeClass = 'text-5xl';
-    if (shape === 'cross') {
-      sizeClass = 'text-6xl';
-    }
-
-    const symbol = getShapeSymbol(shape);
-    const colorClass = getColorClass(color);
-
-    const symbols = [];
-    for (let i = 0; i < number; i++) {
-      symbols.push(
-        <div key={i} className={`${size} ${colorClass} flex items-center justify-center ${sizeClass}  absolute font-bold`}>
-          {symbol}
-        </div>
-      );
-    }
-
-    const positionClasses = [
-      [],
-      ['top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'],
-      ['top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2', 'bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2'],
-      [
-        'bottom-2 left-1/2 -translate-x-1/2',
-        'top-2 left-0 -translate-x-0',
-        'top-2 right-0 -translate-x-0'
-      ],
-      ['top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2', 'top-1/4 right-1/4 translate-x-1/2 -translate-y-1/2', 'bottom-1/4 left-1/4 -translate-x-1/2 translate-y-1/2', 'bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2']
-    ];
-
-    return (
-      <div className="relative w-full h-24">
-        {symbols.map((symbol, index) =>
-          React.cloneElement(symbol, {
-            className: `${symbol.props.className} ${positionClasses[number][index] || ''}`
-          })
-        )}
-      </div>
-    );
-  };
-
-  // Core logic for handling card selection. The component only collects raw
-  // trial data via the engine; all scoring happens later in scoreWCST.
-  const handleCardSelection = useCallback((chosenStimulusId: number) => {
-    if (completed || feedback) return;
-
-    const stimulusCard = STIMULUS_CARDS[chosenStimulusId];
-    const state = engineRef.current;
-    const trialNumber = responses.length + 1;
-
-    // Engine builds the raw trial and advances state (rule/category logic).
-    const { trial, state: nextState, testFinishedThisTrial } =
-      administerTrial(currentCard, chosenStimulusId, stimulusCard, state, trialNumber);
-
-    engineRef.current = nextState;
-    const newResponses = [...responses, trial];
-    setResponses(newResponses);
-
-    if (testFinishedThisTrial) {
-      finishTest(newResponses);
-      return;
-    }
-
-    setFeedback(trial.isCorrect ? 'נכון' : 'לא נכון');
-
-    // Clear feedback and advance to next card
-    setTimeout(() => {
-      setFeedback(null);
-      setResponseDeck((prevDeck) => {
-        const newDeck = prevDeck.slice(1);
-        if (newDeck.length === 0) {
-          finishTest(newResponses);
-          return prevDeck;
-        }
-        setCurrentCard(newDeck[0]);
-        return newDeck;
-      });
-    }, 1500);
-  }, [completed, feedback, currentCard, responses]);
 
   // Save results to database
   const saveToDatabase = async (scores: any, processedResponses: any[]) => {
@@ -240,7 +178,7 @@ export default function WCST({ onComplete }: WCSTProps) {
 
     try {
       const wcstResult: WCSTResult = {
-        participant_id: participantId || null,
+        participant_id: participantIdRef.current || null,
         test_date: new Date().toISOString().split('T')[0],
         total_trials: scores.totalTrials,
         total_correct: scores.totalCorrect,
@@ -275,10 +213,8 @@ export default function WCST({ onComplete }: WCSTProps) {
     }
   };
 
-  // Finish test: score the raw trials deterministically (no React state used).
-  // skipSave=true is used by debug scenarios so exploratory/fixture runs never
-  // write fake data into Supabase.
-  const finishTest = (finalRawResponses: RawTrial[], options?: { skipSave?: boolean }) => {
+  // Finish test and calculate final scores
+  const finishTest = useCallback((finalRawResponses: RawTrial[], options?: { skipSave?: boolean }) => {
     try {
       setCompleted(true);
       const scores = scoreWCST(finalRawResponses);
@@ -301,10 +237,74 @@ export default function WCST({ onComplete }: WCSTProps) {
       console.error("Critical error in finishTest:", error);
       setSaveStatus('error');
     }
-  };
+  }, [onComplete]);
 
-  // Export to CSV with enhanced data
-    // Export to CSV with enhanced data
+  // --- Debug Mode Initialization ---
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const debugParam = searchParams.get('debug');
+    if (!debugParam) return;
+
+    const scenarioBuilder = DEBUG_SCENARIOS[debugParam];
+
+    if (scenarioBuilder) {
+      console.log(`DEBUG MODE: running scenario "${debugParam}" through the real scoring pipeline.`);
+      setShowInstructions(false);
+      const trials = scenarioBuilder();
+      finishTest(trials, { skipSave: true });
+      return;
+    }
+
+    console.log(
+      `DEBUG MODE: no scenario named "${debugParam}". Available scenarios: ${Object.keys(DEBUG_SCENARIOS).join(', ')}. Falling back to static mock data.`
+    );
+    setFinalScores(MOCK_DEBUG_DATA.scores);
+    setFinalProcessedResponses(MOCK_DEBUG_DATA.processedResponses);
+    setCompleted(true);
+    setShowInstructions(false);
+  }, [finishTest]);
+
+  // Core logic for handling card selection
+  const handleCardSelection = useCallback((chosenStimulusId: number) => {
+    if (completed || feedback) return;
+
+    const stimulusCard = STIMULUS_CARDS[chosenStimulusId];
+    const state = engineRef.current;
+    const trialNumber = responses.length + 1;
+
+    // Engine builds the raw trial and advances state
+    const { trial, state: nextState, testFinishedThisTrial } =
+      administerTrial(currentCard, chosenStimulusId, stimulusCard, state, trialNumber);
+
+    engineRef.current = nextState;
+    const newResponses = [...responses, trial];
+    setResponses(newResponses);
+
+    if (testFinishedThisTrial) {
+      finishTest(newResponses);
+      return;
+    }
+
+    setFeedback(trial.isCorrect ? 'נכון' : 'לא נכון');
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    // Clean timer execution without side effects in state updaters
+    timeoutRef.current = setTimeout(() => {
+      setFeedback(null);
+
+      if (responseDeck.length <= 1) {
+        finishTest(newResponses);
+        return;
+      }
+
+      const nextDeck = responseDeck.slice(1);
+      setResponseDeck(nextDeck);
+      setCurrentCard(nextDeck[0]);
+    }, 1500);
+  }, [completed, feedback, currentCard, responses, responseDeck, finishTest]);
+
+  // Export to CSV
   const exportToCSV = () => {
     const headers = [
       "Trial",
@@ -321,7 +321,6 @@ export default function WCST({ onComplete }: WCSTProps) {
       "Tendency At Trial"
     ];
 
-    // Add summary scores at the top
     const summaryRows = [
       ["WCST RESULTS SUMMARY"],
       [""],
@@ -347,23 +346,25 @@ export default function WCST({ onComplete }: WCSTProps) {
       [""]
     ];
 
+    const dataRows = finalProcessedResponses.map(response => [
+      response.trialNumber ?? response.trial ?? '',
+      response.responseCard?.color ?? '',
+      response.responseCard?.shape ?? '',
+      response.responseCard?.number ?? '',
+      response.selectedStimulusIndex ?? '',
+      response.activeRule ?? '',
+      response.isCorrect ? 1 : 0,
+      response.isUnambiguous ? 1 : 0,
+      response.dimensionUsedIfUnambiguous || '',
+      response.perseverative ? 1 : 0,
+      (response.allMatchingDimensions || []).join(';'),
+      response.tendencyAtTrial || ''
+    ].join(','));
+
     const csvContent = [
       ...summaryRows.map(row => row.join(',')),
       headers.join(','),
-      ...finalProcessedResponses.map(response => [
-        response.trial,
-        response.responseCard.color,
-        response.responseCard.shape,
-        response.responseCard.number,
-        response.selectedStimulusIndex,
-        response.activeRule,
-        response.isCorrect ? 1 : 0,
-        response.isUnambiguous ? 1 : 0,
-        response.dimensionUsedIfUnambiguous || '',
-        response.perseverative ? 1 : 0,
-        (response.allMatchingDimensions || []).join(';')
-      ].join(','),
-        response.tendencyAtTrial || '',)
+      ...dataRows
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -402,7 +403,7 @@ export default function WCST({ onComplete }: WCSTProps) {
                 בכל פעם, עליך לבחור את הקלף שלדעתך הוא הקלף המתאים לו.
               </p>
               <p>
-                אני לא יכול להגיד לך לפי איזה עיקרון צריך להתאים את הקלפים, אבל אחרי כל קלף, אני אגיד לך אם עשית זאת 'נכון' או 'לא נכון
+                אני לא יכול להגיד לך לפי איזה עיקרון צריך להתאים את הקלפים, אבל אחרי כל קלף, אני אגיד לך אם עשית זאת 'נכון' או 'לא נכון'.
               </p>
               <p>
                 אין הגבלת זמן למבחן הזה.
@@ -449,7 +450,6 @@ export default function WCST({ onComplete }: WCSTProps) {
   if (completed) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 overflow-y-auto flex justify-center items-start p-4 py-8 md:py-12">
-
         <div className="w-full max-w-6xl mx-auto">
           <Card className="p-8 shadow-2xl border-0 bg-white/95 backdrop-blur-sm">
             <div className="text-center mb-8">
@@ -523,10 +523,9 @@ export default function WCST({ onComplete }: WCSTProps) {
     );
   }
 
-  // Main test view - Perfectly centered using modern Flexbox
+  // Main test view
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-slate-50 via-gray-50 to-blue-50 flex items-center justify-center overflow-hidden">
-      {/* The content is now a direct child of the flex container */}
       <div className="flex flex-col items-center space-y-20">
 
         {/* Stimulus Cards - Top row */}
@@ -573,3 +572,5 @@ export default function WCST({ onComplete }: WCSTProps) {
     </div>
   );
 }
+
+```
